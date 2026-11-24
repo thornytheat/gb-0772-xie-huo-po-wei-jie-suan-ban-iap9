@@ -1,2 +1,83 @@
 <h2>逐单差价</h2><div class="tablebox"><table><thead><tr><th>到达 / 泊位</th><th>应收</th><th>实收</th><th>差价</th><th>回执</th><th>结论</th></tr></thead><tbody>{% for row in report.settlement.lines %}<tr><td>{{ local(row.arrival) }} · {{ row.berth }}</td><td>{{ yuan(row.due_cents) }}</td><td>{{ yuan(row.paid_cents) }}</td><td class="{{ 'difference' if row.difference_cents else '' }}">{{ yuan(row.difference_cents) }}</td><td>{% for r in row.receipts %}{{ r.fields.receipt }} · 第 {{ r.line }} 行{% if not loop.last %} / {% endif %}{% else %}—{% endfor %}</td><td>{{ label[row.code] }}</td></tr>{% else %}<tr><td colspan="6">没有可结算停靠。</td></tr>{% endfor %}</tbody></table></div>
 <section class="panel exceptions"><h3>游离实收</h3>{% for row in report.settlement.orphans %}<p>回执 {{ row.fields.receipt }} · 第 {{ row.line }} 行 · {{ yuan(row.cents) }}</p>{% else %}<p>无游离回执。</p>{% endfor %}</section>{% if report.settlement.isolated %}{% set issues=report.settlement.isolated %}{% include 'issues.j2' %}{% endif %}
+
+<section class="panel clockdesk" id="clock-desk">
+  <div class="folio-title"><h3>杆侧校时与交班放行</h3>{% if clock_state and clock_state.confirmed_seq %}<span class="tag tag-ok">新校时已生效 · 第 {{ clock_state.confirmed_seq }} 版</span>{% endif %}</div>
+  <p class="hint">同一停靠在两种候选校时下可能相差一分钟。应收相同、且没有被校时诱发同车跨泊位重叠或后单跳档的停靠可先结；出现跨泊位重叠的两单、以及时差导致跳档的后一次停靠均列<strong>待核</strong>。校时确认后，本页给出<strong>重算应收</strong>；新校时生效后重跑旧校时不改换当前结论。</p>
+  {% if clock_notice %}<p class="clock-notice" role="status" data-notice="{{ notice_code or '' }}">{{ clock_notice }}</p>{% endif %}
+
+  <form class="clock-form" method="get" action="/clearing/settlement#clock-compare">
+    <input type="hidden" name="sample" value="{{ sample }}">
+    {% if key %}<input type="hidden" name="key" value="{{ key }}">{% endif %}
+    <label>停靠单
+      <select name="cw_stay">
+        {% for s in report.occupancy.stays %}<option value="{{ s.stay }}" {% if cw_stay==s.stay %}selected{% endif %}>{{ local(s.start) }} · {{ s.berth }} · {{ s.stay[:8] }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>校时时差
+      <select name="cw_shift">
+        <option value="-1" {% if cw_shift=='-1' %}selected{% endif %}>提前 1 分钟</option>
+        <option value="1" {% if cw_shift=='1' %}selected{% endif %}>延后 1 分钟</option>
+        <option value="-2" {% if cw_shift=='-2' %}selected{% endif %}>提前 2 分钟（越界演示）</option>
+      </select>
+    </label>
+    <button type="submit">比对两种时刻</button>
+  </form>
+
+  {% if clock_review %}
+  <div id="clock-compare" class="clock-result" data-settle="{{ clock_review.settle_count }}" data-hold="{{ clock_review.hold_count }}">
+    <p class="clock-summary">可先结 <strong class="ok">{{ clock_review.settle_count }}</strong> 单 · 待核 <strong class="bad">{{ clock_review.hold_count }}</strong> 单 · 应收 {{ yuan(clock_review.due_before_cents) }} → <strong>{{ yuan(clock_review.due_after_cents) }}</strong></p>
+    <div class="tablebox"><table><thead><tr><th>到达（原 → 校时）</th><th>泊位</th><th>应收（原 → 重算）</th><th>交班结论</th><th>待核原因</th></tr></thead><tbody>
+      {% for v in clock_review.lines %}
+      <tr class="{{ 'row-hold' if v.hold else 'row-settle' }}" data-stay="{{ v.stay }}" data-status="{{ v.status }}">
+        <td>{{ local(v.arrival_before) }} → {{ local(v.arrival_after) }}</td>
+        <td>{{ v.berth }}</td>
+        <td>{{ yuan(v.due_before_cents) }} → <strong>{{ yuan(v.due_after_cents) }}</strong></td>
+        <td><span class="tag {{ 'tag-bad' if v.hold else 'tag-ok' }}">{{ label[v.status] or ('待核' if v.hold else '可先结') }}</span></td>
+        <td>{% for code in v.reasons %}<span class="tag tag-warn" data-reason="{{ code }}">{{ label[code] or code }}</span> {% else %}—{% endfor %}{% if v.overlap_with %}<small>关联单 {{ v.overlap_with | map('truncate', 8, true, '') | join('、') }}</small>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody></table></div>
+  </div>
+  {% endif %}
+
+  {% if key %}
+  <div class="clock-archive" id="clock-confirm">
+    <form class="clock-form" method="post" action="/clearing/clock#clock-desk">
+      <input type="hidden" name="key" value="{{ key }}"><input type="hidden" name="action" value="apply">
+      <label>晚到校时（停靠单）
+        <select name="target">{% for s in report.occupancy.stays %}<option value="{{ s.stay }}">{{ local(s.start) }} · {{ s.berth }} · {{ s.stay[:8] }}</option>{% endfor %}</select>
+      </label>
+      <label>时差<select name="shift"><option value="-1">提前 1 分钟</option><option value="1">延后 1 分钟</option></select></label>
+      <label>版本号<input name="seq" inputmode="numeric" placeholder="如 2" style="width:5rem"></label>
+      <button type="submit">登记候选校时</button>
+    </form>
+    {% if clock_state and clock_state.current %}
+    <p class="clock-summary">当前候选：第 {{ clock_state.seq }} 版 · {{ clock_state.current.review.settle_count }} 单可先结 / {{ clock_state.current.review.hold_count }} 单待核
+      {% if clock_state.confirmed_seq %}· 已确认第 {{ clock_state.confirmed_seq }} 版{% endif %}</p>
+    <div class="clock-form">
+      <form method="post" action="/clearing/clock#clock-desk" style="display:inline">
+        <input type="hidden" name="key" value="{{ key }}"><input type="hidden" name="action" value="confirm">
+        <input type="hidden" name="seq" value="{{ clock_state.seq or '' }}">
+        <button type="submit" class="primary">校时确认，生成重算应收</button>
+      </form>
+      <form method="post" action="/clearing/clock#clock-desk" style="display:inline">
+        <input type="hidden" name="key" value="{{ key }}"><input type="hidden" name="action" value="rerun_old">
+        <input type="hidden" name="old_seq" value="1">
+        <button type="submit">重跑第 1 版旧校时</button>
+      </form>
+    </div>
+    {% endif %}
+    {% if clock_state and clock_state.conclusion %}
+    <h4>校时确认后的重算应收（对账可查）</h4>
+    <div class="tablebox" id="recalculated-dues"><table><thead><tr><th>到达</th><th>泊位</th><th>原应收</th><th>重算应收</th><th>关联实收</th><th>新差价</th><th>结论</th></tr></thead><tbody>
+      {% for l in clock_state.conclusion.lines %}
+      <tr data-stay="{{ l.stay }}"><td>{{ local(l.arrival) }}</td><td>{{ l.berth }}</td><td>{{ yuan(l.due_before_cents) }}</td><td><strong>{{ yuan(l.recalculated_due_cents) }}</strong></td><td>{{ yuan(l.paid_cents) }}</td><td>{{ yuan(l.difference_cents) }}</td><td>{{ label[l.status] or l.status }}</td></tr>
+      {% endfor %}
+    </tbody><tfoot><tr><td colspan="3">合计重算应收</td><td><strong>{{ yuan(clock_state.conclusion.money.due_cents) }}</strong></td><td>{{ yuan(clock_state.conclusion.money.paid_cents) }}</td><td>{{ yuan(clock_state.conclusion.money.difference_cents) }}</td><td></td></tr></tfoot></table></div>
+    {% endif %}
+  </div>
+  {% else %}
+  <p class="hint">试算不会留档。运行清算取得批次编号后，可在此登记晚到校时并确认重算。</p>
+  {% endif %}
+</section>

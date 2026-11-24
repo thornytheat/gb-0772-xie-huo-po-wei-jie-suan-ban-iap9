@@ -16,6 +16,7 @@ class Docket:
             database.executescript('''
                 CREATE TABLE IF NOT EXISTS settings(name TEXT PRIMARY KEY, value BLOB NOT NULL);
                 CREATE TABLE IF NOT EXISTS dockets(id TEXT PRIMARY KEY, content TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS docket_inputs(id TEXT PRIMARY KEY, files TEXT NOT NULL);
             ''')
             database.execute("INSERT OR IGNORE INTO settings VALUES ('pseudonym_key', ?)",(secrets.token_bytes(32),))
             self.secret=database.execute("SELECT value FROM settings WHERE name='pseudonym_key'").fetchone()[0]
@@ -47,3 +48,13 @@ class Docket:
         with self.connect() as db:
             return [json.loads(row[0]) for row in db.execute(
                 "SELECT json_extract(content,'$.manifest') FROM dockets ORDER BY rowid DESC LIMIT 100")]
+
+    def save_inputs(self,key,files):
+        # 原始四份单据只用于校时重算，独立存放，绝不进入 evidence/manifest/export。
+        with self.connect() as db:
+            db.execute('INSERT OR IGNORE INTO docket_inputs VALUES (?,?)',(key,serialize(files)))
+
+    def load_inputs(self,key):
+        with self.connect() as db:
+            row=db.execute('SELECT files FROM docket_inputs WHERE id=?',(key,)).fetchone()
+        return None if row is None else json.loads(row[0])

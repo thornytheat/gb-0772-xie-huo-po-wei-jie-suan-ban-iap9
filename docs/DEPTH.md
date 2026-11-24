@@ -14,6 +14,7 @@
 | M5 应实收和泊位对账 | 查看逐单差价、游离回执与泊位容量 | `GET /api/cases/dirty/settlement` | `app/billing/settle.py` `app/billing/payments.py` | `tests/test_settlement.py` |
 | M6 批次留档复跑 | 原子落档、查历史及重放 | `POST /api/dockets` | `app/archive/docket.py` `app/archive/rerun.py` | `tests/test_docket.py` |
 | M7 理赔证据签发 | 签发并核验脱敏证据、摘要与勾稽 | `GET /api/export/{key}` | `app/archive/appeal.py` `app/archive/canonical.py` | `tests/test_appeal.py` |
+| M8 双校时交班放行 | 两种校时时刻比对应收，先结同额单、挂起重叠/跳档单，确认后查重算应收，旧校时重跑不回退 | `POST /api/calibrations/review` `POST/GET /api/dockets/{key}/clocks` `POST .../clocks/confirm` `GET /api/dockets/{key}/recalculation` | `app/curb/calibrate.py` `app/archive/clocks.py` | `tests/test_zz_agent_clock_rules.py` |
 
 ## 陷阱登记
 
@@ -34,6 +35,16 @@
 - 脏样检测源 27 = 格式可读 25 + 重复表头 1 + 列数隔离 1。可读 25 再扣车牌 1、范围与重复编号等 4，采信 20。
 - 应管 240 = 空闲 133 + 争议 7 + 首免 10 + 基础价 68 + 升级价 22。实收 2310 分 − 应收 2240 分 = 逐单差价 70 分，游离回执 140 分另列。
 - 归档键以规则版本和输入全摘要生成，留档提交为单事务。重复提交取原运行快照，原件变动产生不同记录。
+
+## 校时交班规则
+
+- 校时复核在两套时刻上各跑一次「碰撞 → 预约采信 → 计价」全链路，按稳定 `stay` 编号逐单比较应收，不做只看一分钟差值的局部估算。
+- 两时刻应收相同、且无下列例外的停靠进入 `SETTLE`（可先结）；否则 `HOLD`（待核）。
+- 一分钟移动产生新的同车跨泊位相交分钟（`OVERLAP`）时，相交两单同时待核，即使该分钟本就免费、两时刻应收相同也不放行。
+- 每车每天的付费档位是全局计数器：时差改变前单的付费分钟数后，未被直接移动的后一次停靠若 BASE/UPGRADE 构成变化（`TIER_JUMP`），那单待核。
+- 到达越过预约撤销/版本边界时记 `BOOKING_FLIP`，并通常伴随 `DUE_CHANGED`；原时刻落在“撤销同刻生效即排除”而校时后严格早于撤销时，原单会多收。
+- 校时事件按显式 `seq/version`（或签发时刻）单调生效：更新版本替换当前候选；同号同 ID 重放为 `DUPLICATE`；新版本生效后重跑旧版本返回 `STALE`，已确认的重算应收结论不变。
+- `POST /api/dockets/{key}/clocks/confirm` 后，`GET /api/dockets/{key}/recalculation` 与对账页 `?key=...#clock-desk` 可查重算应收；原始四份单据另存于独立表，仅用于重算，不进入 evidence/manifest/export，明文车牌仍不外露。
 
 ## 已知边界
 

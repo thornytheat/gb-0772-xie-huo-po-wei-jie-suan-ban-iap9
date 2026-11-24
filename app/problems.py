@@ -13,4 +13,11 @@ LABEL = {
     'BOOKED':'预约已关联','WALK_IN':'无生效预约','GAP':'实收差价','MATCH':'实收一致',
     'NO_PAYMENT':'无实收回执','ORPHAN':'游离实收','ATTACH_CONFLICT':'预约版本冲突',
     'AMOUNT':'金额无效','UNKNOWN_SENSOR':'杆侧来源缺失','NONE':'无占位',
+    'SETTLE':'可先结','READY':'可先结','RELEASE':'可先结','CONFIRMABLE':'可确认应收',
+    'HOLD':'待核','PENDING':'待核',
+    'DUE_CHANGED':'两时刻应收不同','BOOKING_FLIP':'到达越过预约撤销时刻',
+    'OVERLAP':'校时诱发同车跨泊位重叠','TIER_JUMP':'时差致后一次停靠跳档',
+    'APPLIED':'新校时已生效','STALE':'旧校时重跑未改结论','DUPLICATE':'校时记录重复',
+    'CONFIRMED':'校时已确认','CLOCK_OLD_IGNORED':'旧校时不改换当前结论',
+    'CLOCK_APPLIED':'校时结论已更新','CLOCK_CONFIRMED':'重算应收已确认',
 }

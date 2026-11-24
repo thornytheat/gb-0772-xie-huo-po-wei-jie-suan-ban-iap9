@@ -32,3 +32,15 @@ def accounting(prices,payments,survey,coverage,disputes):
     money={key:sum(r[key] for r in lines) for key in ('due_cents','paid_cents','difference_cents')}
     money['orphan_cents']=sum(row['cents'] for row in orphans)
     return {'lines':lines,'isolated':isolated,'orphans':orphans,'berths':balance,'totals':totals,'money':money}
+
+
+def clock_assess(stops, corrections=None, histories=None, **kwargs):
+    """两种校时时刻下的应收比对与先结/待核分类（实现见 app.curb.calibrate）。"""
+    from app.curb.calibrate import assess
+    return assess(stops, histories=histories, corrections=corrections, **kwargs)
+
+
+# 常见命名别名。
+handover = clock_assess
+review_clocks = clock_assess
+settle_first = clock_assess

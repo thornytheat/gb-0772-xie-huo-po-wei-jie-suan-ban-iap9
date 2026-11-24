@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api import api
+from app.archive.clocks import ClockStore
 from app.archive.docket import Docket
 from app.problems import DocketError
 from app.web import workbench
@@ -13,7 +14,9 @@ from app.web import workbench
 
 def create_app(path=None):
     app=FastAPI(title='卸货泊位结算板')
-    app.state.docket=Docket(path or os.getenv('CURB_DOCKET','var/curb.sqlite3'))
+    db_path=path or os.getenv('CURB_DOCKET','var/curb.sqlite3')
+    app.state.docket=Docket(db_path)
+    app.state.clocks=ClockStore(db_path)
     app.mount('/static',StaticFiles(directory=Path(__file__).parent/'static'),name='static')
     app.include_router(api)
     app.include_router(workbench)

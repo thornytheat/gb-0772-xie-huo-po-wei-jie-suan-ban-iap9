@@ -27,6 +27,11 @@ python -m pytest -q
 
 独立预览为 `GET /api/cases/{dirty|clean}/{stage}`，阶段名见深度登记。自有样例可以 `POST /api/dockets`，`bundle` 对象需包含 `survey`、`sensors`、`bookings`、`payments` 四份 UTF-8 字符串，内置数据可用 `{"sample":"dirty"}`。历史 `GET /api/dockets`，归档 `GET /api/dockets/{key}`，理赔附件 `GET /api/export/{key}`。
 
+## 杆侧双校时交班
+
+两种候选校时相差一分钟时，对账页「杆侧校时与交班放行」（或 `POST /api/calibrations/review`，入参 `sample`/`bundle`/`key` 加 `corrections:[{stay|event,shift_minutes}]`）逐单比较两个时刻重算的应收：同额且无例外的单标记「可先结」；校时诱发同车跨泊位重叠的两单、以及时差使后一次停靠跳档的那单标记「待核」。批次留档后可 `POST /api/dockets/{key}/clocks` 登记带 `seq` 的晚到校时，`.../clocks/confirm` 确认，随后 `GET /api/dockets/{key}/recalculation` 或对账页 `?key=...` 查「重算应收」。更新校时生效后重跑更旧的 `seq` 只返回 `STALE`，不回退当前结论。
+
+
 - [字段、计费与边界](docs/DATA-DICTIONARY.md)
 - [模块和陷阱](docs/DEPTH.md)
 - [理赔复核步骤](docs/APPEAL.md)

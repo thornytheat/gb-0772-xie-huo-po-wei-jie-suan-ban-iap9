@@ -14,10 +14,13 @@ def run(docket, payload):
     key=digest({'files':hashes,'policy':POLICY})
     existing=docket.find(key)
     if existing:
+        docket.save_inputs(key,original)
         return existing,True
     clearing=Clearing(original,docket.secret)
     report=clearing.report()
     manifest={'key':key,'source':source,'rule':POLICY,'inputs':hashes,'evidence_sha256':digest(report),
               'survey':vars(clearing.survey),'created_utc':datetime.now(UTC).isoformat(timespec='seconds'),
               'elapsed_ms':round((perf_counter()-started)*1000)}
-    return docket.publish(key,{'manifest':manifest,'evidence':report})
+    record,reused=docket.publish(key,{'manifest':manifest,'evidence':report})
+    docket.save_inputs(key,original)
+    return record,reused
